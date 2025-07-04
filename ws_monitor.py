@@ -1,7 +1,15 @@
-import os, csv, json, asyncio, time, argparse, yaml
+import os
+import csv
+import json
+import asyncio
+import time
+import argparse
+import yaml
 from datetime import datetime
 from pathlib import Path
 import websockets
+
+from exchanges import EXCHANGE_MAP
 
 # ─────────────────────────────────────────────────────────────
 # 1️⃣  Читаем YAML-конфиг  (config.yaml)  +  значения по умолчанию
@@ -13,6 +21,7 @@ DEFAULTS = dict(
     snap_dir       = "snapshots",
     top_to_print   = 20,        # сколько пар выводить в глобальном режиме
     focus          = None,      # например "FUNUSDT" — точечный режим
+    exchange       = "binance", # биржа для работы
 )
 
 def load_cfg(path="config.yaml") -> dict:
@@ -28,11 +37,13 @@ CFG = load_cfg()
 # ─────────────────────────────────────────────────────────────
 # 2️⃣  CLI-аргументы — перекрывают YAML только на текущий запуск
 # ─────────────────────────────────────────────────────────────
-cli = argparse.ArgumentParser(description="Binance USDT-монитор")
+cli = argparse.ArgumentParser(description="USDT-монитор для разных бирж")
 cli.add_argument("--focus", help="точечная пара, напр. FUNUSDT")
 cli.add_argument("--interval", type=int, help="секунд между циклами")
 cli.add_argument("--thr", "--threshold", dest="threshold_pct", type=float,
                  help="порог Δ%")
+cli.add_argument("--exchange", choices=EXCHANGE_MAP.keys(),
+                help="биржа: binance, okx или max")
 args = cli.parse_args()
 for k, v in vars(args).items():
     if v is not None:
@@ -48,7 +59,8 @@ SNAP_DIR      = Path(CFG["snap_dir"])
 TOP_TO_PRINT  = CFG["top_to_print"]
 FOCUS         = CFG["focus"].upper() if CFG["focus"] else None
 
-STREAM = "wss://stream.binance.com:9443/ws/!ticker@arr"
+EXCHANGE_MOD = EXCHANGE_MAP.get(CFG.get("exchange", "binance"), EXCHANGE_MAP["binance"])
+STREAM = EXCHANGE_MOD.STREAM_URL
 
 # ─────────────────────────────────────────────────────────────
 def save_snapshot(prices: dict[str, float]) -> None:
@@ -76,8 +88,8 @@ async def monitor_focus(pair: str):
 
     async with websockets.connect(STREAM, ping_interval=20) as ws:
         async for msg in ws:
-            tickers = json.loads(msg)
-            price = next((float(t["c"]) for t in tickers if t["s"] == pair), None)
+            prices = EXCHANGE_MOD.parse_prices(msg)
+            price = prices.get(pair)
             if price is None:
                 continue
 
@@ -105,8 +117,7 @@ async def monitor_global():
 
     async with websockets.connect(STREAM, ping_interval=20) as ws:
         async for msg in ws:
-            cur = {t["s"]: float(t["c"])
-                   for t in json.loads(msg) if t["s"].endswith("USDT")}
+            cur = EXCHANGE_MOD.parse_prices(msg)
 
             if time.time() - last_save < INTERVAL:
                 continue
@@ -132,10 +143,14 @@ async def monitor_global():
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     if FOCUS:
-        print(f"▶ Фокус-режим: {FOCUS} | Δ ≥ {THRESHOLD_PCT}% | шаг {INTERVAL}s")
+        print(
+            f"▶ {CFG['exchange']} | Фокус-режим: {FOCUS} | Δ ≥ {THRESHOLD_PCT}% | шаг {INTERVAL}s"
+        )
         coro = monitor_focus(FOCUS)
     else:
-        print(f"▶ Глобальный режим | Δ ≥ {THRESHOLD_PCT}% | шаг {INTERVAL}s")
+        print(
+            f"▶ {CFG['exchange']} | Глобальный режим | Δ ≥ {THRESHOLD_PCT}% | шаг {INTERVAL}s"
+        )
         coro = monitor_global()
 
     try:
