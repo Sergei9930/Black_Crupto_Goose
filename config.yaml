@@ -7,3 +7,4 @@ max_files:      50      # хранить не более N CSV-файлов
 snap_dir:       snapshots
 top_to_print:   20      # сколько пар выводить в глобальном режиме
 focus:          null    # например "FUNUSDT" — будет работать как --focus
+exchange:       binance # биржа: binance, okx или max
