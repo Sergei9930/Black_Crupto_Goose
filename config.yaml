@@ -3,8 +3,10 @@
 
 interval:       60      # секунд между сравнениями/снимками
 threshold_pct:  0.1     # выводить, если |Δ| ≥ …
-max_files:      50      # хранить не более N CSV-файлов
+max_files:      60      # хранить не более N CSV-файлов
 snap_dir:       snapshots
 top_to_print:   20      # сколько пар выводить в глобальном режиме
 focus:          null    # например "FUNUSDT" — будет работать как --focus
 exchange:       binance # биржа: binance, okx или max
+snap_interval:  1       # как часто писать снимок, сек
+analysis_intervals: [10, 30, 60]  # интервалы для analyzer.py
